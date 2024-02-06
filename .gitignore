@@ -1,0 +1,20 @@
+#  Local .terraform directories
+**/.terraform/*
+*.tfvars
+
+# Ignore any .tfstate files
+*.tfstate
+*.tfstate.*
+*.lock.hcl
+
+crash.log
+
+# SSH Keys
+*.pem
+
+# Backup files
+*.bak
+*.backup
+
+# Mac system folders
+.DS_Store
