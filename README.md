@@ -30,8 +30,8 @@ This project was brought about because I recently had to complete this very proj
 
 ### PROS
 
-* Network traffic to and from the database is encrypted using Secure Socket Layer (SSL) or Transport Layer Security (TLS).
-* You can use IAM to centrally manage access to your database resources, instead of managing access individually on each DB instance.
+* Network traffic to and from the database is encrypted using Secure Socket Layer (SSL) / Transport Layer Security (TLS).
+* You can use IAM to centrally manage access to your database resources, instead of managing access individually on each DB instance. This can be extrapolated out to being managed by SSO like Okta
 * For applications running on Amazon EC2, you can use profile credentials specific to your EC2 instance to access your database instead of a password, for greater security.
 
 ### CONS
@@ -52,7 +52,7 @@ This project was brought about because I recently had to complete this very proj
 * IAM Role & Policy
 * EC2 Instance to be used as a Bastion
 * RDS Instances
-* SSM Parameter for storing the `sre` user's password.
+* SSM Parameter for storing the `admin` user's password.
 * Security Groups
 * VPC
 
@@ -95,7 +95,7 @@ Once the terraform code has been applied you will need to connect to the Bastion
 * ` ssh -A ubuntu@123.123.123.123` (This is the public facing IP address of your Bastion instance. For production use you should have this instance locked down more with a security group or behind a VPN and you would also have an EIP attached that is connected to a Route53 record. If the instance went down and came back up you would have a script that reattaches the EIP and the R53 record would still point to your instance.)
 * ` sudo su -` to become root
 
-Once you have successfully connected to the Bastion as the `sre` user which is named and created from the variables.tf file. You will connect to the database and create a new user, `dev`, that will be given the `rds_iam` permission so that IAM users who are allowed via their role assignment, will be able to log into this RDS instance.
+Once you have successfully connected to the Bastion as the `admin` user which is named and created from the variables.tf file. The following steps of creating the user and granting permissions is done for you in the `mysql.tf` file now. These are the manual steps that you would need to do so these are good to know anyways. You will connect to the database and create a new user, `dev`, that will be given the `rds_iam` permission so that IAM users who are allowed via their role assignment, will be able to log into this RDS instance.
 
 Grab the admin password:
 * `aws ssm --region us-east-1 get-parameters --names "PATH_OF_YOUR_SSM_PARAMETER" | grep Value`
@@ -112,7 +112,7 @@ See below for instructions on how to connect to your specific RDS instance...
 
 While still as the root user on your bastion, run the following commands:
 * `export RDSHOST="INSERT_ENDPOINT_HOST_NAME"` (An example might look like this: `iam-auth-demo-postgres.sdfv8356vhkj.us-east-1.rds.amazonaws.com`)
-* `psql -h $RDSHOST -p 5432 -U sre -d postgres` (You are connecting as the `sre` user here first.)
+* `psql -h $RDSHOST -p 5432 -U admin -d postgres` (You are connecting as the `admin` user here first.)
 
 <br/>
 
@@ -151,7 +151,7 @@ The steps and instructions are the exact same for the MYSQL and MariaDB database
 
 While still as the root user on your bastion, run the following commands:
 * `export RDSHOST="INSERT_ENDPOINT_HOST_NAME"` (An example might look like this: `iam-auth-demo-mysql.sdfv8356vhkj.us-east-1.rds.amazonaws.com`)
-* `mysql -h $RDSHOST -P 3306 -u sre -p` (You are connecting as the `sre` user here first.)
+* `mysql -h $RDSHOST -P 3306 -u admin -p` (You are connecting as the `admin` user here first.)
 
 Once connected to the database run these commands:
 * `CREATE USER dev IDENTIFIED WITH AWSAuthenticationPlugin as 'RDS';` (Creates the user `dev`)
@@ -205,7 +205,7 @@ data "aws_iam_policy_document" "rds_eks_assume_role_policy" {
       test     = "StringEquals"
       variable = "${replace(data.aws_eks_cluster.eks.identity[0].oidc[0].issuer, "https://", "")}:sub"
       values = [
-        "system:serviceaccount:${terraform.workspace}-${var.namespace}:${var.service_name}"
+        "system:serviceaccount:${var.environment}-${var.namespace}:${var.service_name}"
       ]
     }
   }
