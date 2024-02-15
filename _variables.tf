@@ -1,5 +1,3 @@
-data "aws_caller_identity" "current" {}
-
 variable "default_region" {
   default = "us-east-1"
 }
@@ -55,7 +53,7 @@ variable "storage_type" {
 }
 
 variable "db_username" {
-  default = "sre"
+  default = "admin"
 }
 
 variable "iam_database_authentication_enabled" {
@@ -85,13 +83,19 @@ variable "maintenance_window" {
   description = "The window to perform maintenance in (in UTC). Syntax: `ddd:hh24:mi-ddd:hh24:mi`. Eg: `Mon:00:00-Mon:03:00`. "
 }
 
+variable "rds_dev_user" {
+  default = "developer"
+}
 
+variable "rds_ro_user" {
+  default = "read_only"
+}
 
 ######### MISC #########
 
 
 variable "demo_ssm_parameter" {
-  default     = "/SRE/database/demo"
+  default     = "/database/demo"
   description = "The location where the database password is kept."
 }
 
@@ -113,7 +117,7 @@ variable "Service_Name" {
 }
 
 variable "Owning_Team" {
-  default = "SRE"
+  default = "YourTeam"
 }
 
 variable "Automation" {
