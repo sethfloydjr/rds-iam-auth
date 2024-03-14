@@ -211,5 +211,3 @@ data "aws_iam_policy_document" "rds_eks_assume_role_policy" {
   }
 }
 ```
-
-Feel free to contact me with any questions `seth  AT  sethfloydjr  dot  com`
