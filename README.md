@@ -4,9 +4,9 @@
 
 Configured in _providers.tf
 
-* Terraform - ">1.5.1, <1.6.0"
-* AWS Provider - "> 5.0.0, <6.0.0"
-* Random - "~> 3.5.1"
+* Terraform - `1.7.5`
+* AWS Provider - `> 5.0.0, <6.0.0`
+* Random - `~> 3.5.1`
 
 Configured in vpc.tf
 

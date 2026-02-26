@@ -25,19 +25,19 @@ resource "aws_iam_policy" "rds_service_policy" {
   name        = "Demo-RDS-mysql-Access"
   description = "Allows access through IAM for users to connect to RDS mysql database"
 
-  policy = <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Action": [
-        "rds-db:connect"
-      ],
-      "Effect": "Allow",
-      "Resource": "arn:aws:rds-db:${var.default_region}:${data.aws_caller_identity.current.account_id}:dbuser:${aws_db_instance.this.resource_id}/*"
-    }
-  ]
-
-}
-EOF
+  # Scoped to the specific developer and read-only database users on this instance only.
+  # The wildcard /* was replaced with explicit user ARNs to enforce least privilege.
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = ["rds-db:connect"]
+        Effect = "Allow"
+        Resource = [
+          "arn:aws:rds-db:${var.default_region}:${data.aws_caller_identity.current.account_id}:dbuser:${aws_db_instance.this.resource_id}/${var.rds_dev_user}",
+          "arn:aws:rds-db:${var.default_region}:${data.aws_caller_identity.current.account_id}:dbuser:${aws_db_instance.this.resource_id}/${var.rds_ro_user}",
+        ]
+      }
+    ]
+  })
 }
