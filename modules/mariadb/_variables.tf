@@ -5,7 +5,7 @@ variable "engine" {
 # Run the following command for the available versions:
 # aws rds describe-db-engine-versions --default-only --engine mariadb --region us-east-1
 variable "engine_version" {
-  default = "10.6.10"
+  default = "10.11.16"
 }
 
 variable "enabled_cloudwatch_logs_exports" {
@@ -21,6 +21,8 @@ variable "allow_major_version_upgrade" {}
 variable "auto_minor_version_upgrade" {}
 variable "allocated_storage" {}
 variable "storage_type" {}
+variable "storage_encrypted" {}
+variable "multi_az" {}
 variable "username" {}
 variable "password" {}
 variable "iam_database_authentication_enabled" {}
@@ -34,3 +36,5 @@ variable "final_snapshot_identifier" {}
 variable "vpc_id" {}
 variable "vpc_cidr" {}
 variable "Service_Name" {}
+variable "rds_dev_user" {}
+variable "rds_ro_user" {}

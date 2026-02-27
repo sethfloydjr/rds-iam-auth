@@ -1,9 +1,16 @@
-#This sets up the password that will be used by you to access the instance as the `admin` user as defined in variables.tf
-#This is a backdoor into the instance that a DBA or DevOps/SRE might use.
-resource "aws_ssm_parameter" "ssm_parameter" {
-  name  = var.demo_ssm_parameter
-  type  = "String"
-  value = random_password.password.result
+resource "aws_secretsmanager_secret" "db_admin_password" {
+  name                    = var.db_secret_name
+  description             = "Admin password for the demo RDS instances (PostgreSQL, MySQL, MariaDB)"
+  recovery_window_in_days = 7
+}
+
+resource "aws_secretsmanager_secret_version" "db_admin_password" {
+  secret_id     = aws_secretsmanager_secret.db_admin_password.id
+  secret_string = random_password.password.result
+
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
 }
 
 resource "random_password" "password" {

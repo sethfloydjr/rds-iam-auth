@@ -1,0 +1,21 @@
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Secret Scanning
+        # Pin to a specific version tag rather than @main to prevent supply-chain attacks.
+        # Check https://github.com/trufflesecurity/trufflehog/releases for the latest version
+        # and update this tag when upgrading.
+        uses: trufflesecurity/trufflehog@v3.88.1
+        with:
+          extra_args: --results=verified,unknown

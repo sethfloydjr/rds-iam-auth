@@ -7,6 +7,8 @@ resource "aws_db_instance" "this" {
   auto_minor_version_upgrade          = var.auto_minor_version_upgrade
   allocated_storage                   = var.allocated_storage
   storage_type                        = var.storage_type
+  storage_encrypted                   = var.storage_encrypted
+  multi_az                            = var.multi_az
   username                            = var.username
   password                            = var.password
   iam_database_authentication_enabled = var.iam_database_authentication_enabled

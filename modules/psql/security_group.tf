@@ -10,11 +10,4 @@ resource "aws_security_group" "psql_demo_rds_sg" {
     description = "PSQL Access Port"
   }
 
-  # outbound internet access
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
 }
