@@ -12,7 +12,7 @@ resource "aws_iam_access_key" "john_smith_access_key" {
 
 
 # Scoped policy: only allows rds-db:connect for the specific users on the specific RDS instances.
-# This replaces the overly broad PowerUserAccess policy that was used for demo purposes.
+# If you comment out any module in rds.tf, remove the corresponding lines from the Resource list below.
 resource "aws_iam_policy" "john_smith_rds_policy" {
   name        = "john-smith-rds-iam-connect"
   description = "Allows john.smith to connect to the demo RDS instances via IAM authentication only"

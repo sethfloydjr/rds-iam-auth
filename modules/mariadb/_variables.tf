@@ -5,7 +5,7 @@ variable "engine" {
 # Run the following command for the available versions:
 # aws rds describe-db-engine-versions --default-only --engine mariadb --region us-east-1
 variable "engine_version" {
-  default = "10.6.10"
+  default = "10.11.16"
 }
 
 variable "enabled_cloudwatch_logs_exports" {

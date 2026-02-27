@@ -16,7 +16,6 @@
 #      s3:PutObject, s3:DeleteObject on the key, and dynamodb:GetItem,
 #      dynamodb:PutItem, dynamodb:DeleteItem on the table.
 #
-# After uncommenting, run `terraform init` to migrate existing local state.
 # -----------------------------------------------------------------------
 
 # terraform {

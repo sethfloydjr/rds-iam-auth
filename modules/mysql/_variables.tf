@@ -5,7 +5,7 @@ variable "engine" {
 # Run the following command for the available versions:
 # aws rds describe-db-engine-versions --default-only --engine mysql --region us-east-1
 variable "engine_version" {
-  default = "8.0.28"
+  default = "8.0.45"
 }
 
 variable "enabled_cloudwatch_logs_exports" {

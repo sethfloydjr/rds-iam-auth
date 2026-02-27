@@ -5,7 +5,7 @@ variable "engine" {
 # Run the following command for the available versions:
 # aws rds describe-db-engine-versions --default-only --engine postgres --region us-east-1
 variable "engine_version" {
-  default = "13.7"
+  default = "16.11"
 }
 
 variable "enabled_cloudwatch_logs_exports" {

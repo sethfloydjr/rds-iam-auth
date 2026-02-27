@@ -1,24 +1,28 @@
 # RDS-IAM-AUTH
+
 ---
-# VERSIONS
 
-Configured in _providers.tf
+## VERSIONS
 
-* Terraform - `1.7.5`
-* AWS Provider - `> 5.0.0, <6.0.0`
-* Random - `~> 3.5.1`
+Configured in `_providers.tf`:
 
-Configured in vpc.tf
+* Terraform — `~> 1.14.1`
+* AWS Provider — `>= 6.0.0, < 7.0.0`
+* Random — `~> 3.5.1`
+* MySQL Provider — `~> 1.9`
+* PostgreSQL Provider — `~> 1.22`
 
-* VPC module - "~> 5.1.1"
+Configured in `vpc.tf`:
 
+* VPC module — `~> 5.1.1`
+
+---
 
 ## PURPOSE
 
-This project demonstrates how to setup IAM authentication into a PSQL, MYSQL, and MariaDB RDS instance to increase your security posture inside AWS.
-For a deeper dive checkout the AWS Support Docs [here](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.IAMDBAuth.html).
+This project demonstrates how to set up IAM authentication for PostgreSQL, MySQL, and MariaDB RDS instances on AWS. For a deeper dive, see the [AWS IAM database authentication docs](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.IAMDBAuth.html).
 
-This project was brought about because I recently had to complete this very project where I work. In looking around on the internet to see how others had done this, I was not having much luck. I was able to piece together what should be done but that was from looking through a lot of AWS docs and half written tutorials on the subject. Here I have put together the steps for all 3 RDS types that accept IAM authentication. Feel free to fork and rework this code to fit your needs. This is a very basic use case and should not represent something you would use in your production environment without adding security measures. For simplicity and ease of understanding, I have made this fairly insecure on purpose. There are a few notes in the code that will point out things you should change to make this more secure.
+This project covers all three RDS engine types that support IAM authentication. The infrastructure is intentionally kept minimal to focus on the IAM auth pattern itself. It should be reviewed and adapted before use in a production environment — see the inline code comments for notes on what to adjust.
 
 <br/>
 
@@ -30,14 +34,14 @@ This project was brought about because I recently had to complete this very proj
 
 ### PROS
 
-* Network traffic to and from the database is encrypted using Secure Socket Layer (SSL) / Transport Layer Security (TLS).
-* You can use IAM to centrally manage access to your database resources, instead of managing access individually on each DB instance. This can be extrapolated out to being managed by SSO like Okta
-* For applications running on Amazon EC2, you can use profile credentials specific to your EC2 instance to access your database instead of a password, for greater security.
+* Network traffic to and from the database is encrypted using SSL/TLS.
+* IAM centralizes access control across all your RDS instances instead of managing credentials per database. This integrates naturally with SSO providers like Okta.
+* Applications running on EC2, EKS, or Lambda can use their instance/pod/function IAM role to authenticate without storing any database password.
 
 ### CONS
 
-* In general, consider using IAM database authentication when your applications create fewer than 200 connections per second, and you don't want to manage usernames and passwords directly in your application code.
-* This will likely be a new way of connecting to a database for most developers so there might be a slight learning curve. I have not run into any issues that the AWS documentation could not help me with.
+* IAM database authentication is best suited for workloads with fewer than 200 new connections per second. For high-throughput connection patterns, consider using RDS Proxy in front of your instances.
+* Auth tokens expire after 15 minutes, so clients must regenerate them on reconnect. Most connection libraries and drivers handle this transparently.
 
 <br/>
 
@@ -45,16 +49,21 @@ This project was brought about because I recently had to complete this very proj
 
 <br/>
 
-## RESOURCES CREATED
+## ESTIMATED COST
 
-* IAM user
-* IAM Access Key
-* IAM Role & Policy
-* EC2 Instance to be used as a Bastion
-* RDS Instances
-* SSM Parameter for storing the `admin` user's password.
-* Security Groups
-* VPC
+Costs below are for **us-east-1** and assume one RDS instance (`db.t4g.micro`, Multi-AZ, 20 GB gp3). Prices are approximate and subject to AWS pricing changes.
+
+| Resource | Details | Est. Monthly Cost |
+| --- | --- | --- |
+| RDS instance | db.t4g.micro, Multi-AZ | ~$23 |
+| RDS storage | 20 GB gp3 | ~$2 |
+| NAT Gateway | 1 gateway (see note) | ~$33 |
+| Secrets Manager | 1 secret | ~$0.40 |
+| **Total** | | **~$58/month** |
+
+> **NAT Gateway note:** The VPC module defaults to one NAT gateway per availability zone — three gateways for this configuration — which brings the NAT cost to ~$99/month and the total to ~$124/month. To reduce this, add `single_nat_gateway = true` to `vpc.tf` before applying.
+>
+> **All three instances:** Applying all three RDS modules as-is (PostgreSQL + MySQL + MariaDB, three NAT gateways) runs approximately **$175/month**. Comment out the modules you do not need in `rds.tf`.
 
 <br/>
 
@@ -66,41 +75,35 @@ This project was brought about because I recently had to complete this very proj
 
 ### TERRAFORM SETTINGS
 
-There are a few variables that you will want to pay attention to in this stack. For general vars see the `variables.tf` file in the root of the repo. For RDS type specific vars see the `variable.tf` files located in th respective module directories.
+Key variables are split between the root module and each engine-specific module.
 
-* General:
-    * `rds-iam-auth/variables.tf`
-
-* Module Specific:
-    * `modules/mariadb/variables.tf`
-    * `modules/mysql/variables.tf`
-    * `modules/psql/variables.tf
-
-In the `scripts/bastion.tpl` file you will notice that a MariaDB client is not installed. The regular mysql client will work just fine for this use case. Installing `mariadb-client-core-10.3` will cause issues with the `--enable-cleartext-plugin` flag and you will get an error that looks similar to this, `mysql: unknown option '--enable-cleartext-plugin'`.
+* Root variables: `_variables.tf`
+* Engine-specific variables:
+    * `modules/mariadb/_variables.tf`
+    * `modules/mysql/_variables.tf`
+    * `modules/psql/_variables.tf`
 
 <br/>
 
 ### GETTING SETUP
 
-You will need to fully apply the Terraform code provided for the type of RDS instance you need. This will build out the resources needed for a basic RDS setup. Note that you will need to refer to several of the outputs given in the following steps. I would suggest building your terraform code in a separate terminal than the one you try to connect to the database with. Note that this process could also be automated with a simple script that is executed when the Terraform apply is run but that is for another demo.
+Apply the Terraform code for the RDS engine type(s) you need. The `mysql` and `postgresql` Terraform providers will automatically create the IAM-authenticated database users during apply.
 
-<br/>
+> **Warning: applying as-is will provision all three RDS instances (PostgreSQL, MySQL, MariaDB). To use only one engine type, comment out the unneeded module blocks in `rds.tf`, remove the corresponding ARNs from the IAM policy in `iam_access.tf`, and remove the corresponding provider from `_providers.tf`.**
 
-!!!IF YOU APPLY THE TERRAFORM AS IS YOU WILL BUILD ALL THREE RDS INSTANCES!!!
+**Network access requirement:** The RDS instances are deployed in private subnets and are not publicly accessible. To connect from your local machine you need network access into the VPC — typically via a VPN or AWS Client VPN. The same network access is required for `terraform apply` to run the `mysql` and `postgresql` providers that create the database users.
 
-<br/>
+**Download the RDS global SSL certificate bundle** to your local machine. This is required for IAM authentication:
 
-Once the terraform code has been applied you will need to connect to the Bastion instance. Very basically, you will add your SSH key to your local keychain and then connect to the Bastion instance. Your commands may differ based on your local working OS but my steps look like this:
-* `ssh-add ~/.ssh/my_key`
-* ` ssh -A ubuntu@123.123.123.123` (This is the public facing IP address of your Bastion instance. For production use you should have this instance locked down more with a security group or behind a VPN and you would also have an EIP attached that is connected to a Route53 record. If the instance went down and came back up you would have a script that reattaches the EIP and the R53 record would still point to your instance.)
-* ` sudo su -` to become root
+* `curl -o ~/global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem`
 
-Once you have successfully connected to the Bastion as the `admin` user which is named and created from the variables.tf file. The following steps of creating the user and granting permissions is done for you in the `mysql.tf` file now. These are the manual steps that you would need to do so these are good to know anyways. You will connect to the database and create a new user, `dev`, that will be given the `rds_iam` permission so that IAM users who are allowed via their role assignment, will be able to log into this RDS instance.
+**Retrieve the admin password** from Secrets Manager (useful for initial verification or manual DBA access):
 
-Grab the admin password:
-* `aws ssm --region us-east-1 get-parameters --names "PATH_OF_YOUR_SSM_PARAMETER" | grep Value`
+* `aws secretsmanager get-secret-value --secret-id rds-iam-auth/admin-password --region us-east-1 --query SecretString --output text`
 
-See below for instructions on how to connect to your specific RDS instance...
+**Configure your local AWS credentials** as the `john.smith` IAM user created by Terraform:
+
+* `aws configure` — enter the Access Key ID and Secret retrieved with `terraform output -raw access_key_secret`
 
 <br/>
 
@@ -110,32 +113,30 @@ See below for instructions on how to connect to your specific RDS instance...
 
 ### CONNECT TO THE PSQL DATABASE
 
-While still as the root user on your bastion, run the following commands:
-* `export RDSHOST="INSERT_ENDPOINT_HOST_NAME"` (An example might look like this: `iam-auth-demo-postgres.sdfv8356vhkj.us-east-1.rds.amazonaws.com`)
-* `psql -h $RDSHOST -p 5432 -U admin -d postgres` (You are connecting as the `admin` user here first.)
+The `developer` and `read_only` database users are created automatically by `psql_users.tf` during `terraform apply`.
 
-<br/>
+Set your environment variables:
 
-Once connected to the database run these commands:
-* `CREATE USER dev WITH LOGIN;` (Creates the user `dev`)
-* `GRANT rds_iam TO dev;` (Allows IAM users to connect as `dev` using IAM roles)
-    * Optional steps that you may want to go ahead and do but are not required for the `dev` user to be able to connect"
-        * `CREATE DATABASE your_database;`
-        * `GRANT CONNECT ON DATABASE your_database TO dev;`
+```bash
+export RDSHOST="$(terraform output -raw psql_rds_endpoint)"
+export REGION="us-east-1"
+export RDSUSER="developer"   # or: read_only
+```
 
-<br/>
+Generate a 15-minute IAM auth token and connect:
 
-Quit out of the connection and setup the environment to connect as your `dev` user. There are a few different ways you can pass in AWS secret keys to your bastion to be able to connect. You can give permissions through the IAM role for the Bastion as well. For simplicity we will paste in our keys like below. Do not do this in your production environment!!
+```bash
+export PGPASSWORD="$(aws rds generate-db-auth-token \
+  --hostname $RDSHOST --port 5432 --region $REGION --username $RDSUSER)"
 
-* `export AWS_ACCESS_KEY_ID="AWS_ACCESS_KEY_ID"` (The key for our John.Smith IAM user we created with the Terraform code)
-* `export AWS_SECRET_ACCESS_KEY="AWS_SECRET_ACCESS_KEY"`
-* `export REGION="us-east-1"` (The default_region defined in variables.tf)
-* `export RDSUSER="dev"`
-* `export PGPASSWORD="$(aws rds generate-db-auth-token --hostname $RDSHOST --port 5432 --region $REGION --username $RDSUSER)"` (This is the session token. It is created based on the values above and only lasts for 15 minutes. If you connect to the the DB and 15 minutes elapse and you disconnect, you will need to regenerate this token to connect again. If you are connected and time elapses you are not kicked off the instance. See [here](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.IAMDBAuth.Connecting.html) for more information about session tokens for RDS.)
-* `echo $PGPASSWORD` (Verify that your token was created correctly.)
-* `psql "host=$RDSHOST port=5432 sslmode=verify-full sslrootcert=/opt/global-bundle.pem dbname=postgres user=$RDSUSER password=$PGPASSWORD"` (Command to finally connect as the `dev` user. Notice that we use SSL here. The global RDS cert is installed for you on the bastion on Terraform apply. This is required for IAM authentication. For more info on that see [here](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.SSL.html) and [here](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/PostgreSQL.Concepts.General.SSL.html).)
+psql "host=$RDSHOST port=5432 sslmode=verify-full \
+  sslrootcert=~/global-bundle.pem dbname=postgres \
+  user=$RDSUSER password=$PGPASSWORD"
+```
 
-Should you want to use a tool like `pgadmin` look [here](https://aws.amazon.com/blogs/database/using-iam-authentication-to-connect-with-pgadmin-amazon-aurora-postgresql-or-amazon-rds-for-postgresql/) for help on setting that up. Scroll all the way down to the **Connecting** section. Note that whatever machine you want to connect from, it needs to be allowed in the security group for the RDS instance.
+The token is valid for 15 minutes. If you disconnect and reconnect after it expires, regenerate it by re-running the `generate-db-auth-token` command. An active connection is not dropped when the token expires. For more detail, see the [IAM auth token docs](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.IAMDBAuth.Connecting.html) and [RDS SSL docs](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.SSL.html).
+
+To use a GUI tool like pgAdmin, see [this AWS guide](https://aws.amazon.com/blogs/database/using-iam-authentication-to-connect-with-pgadmin-amazon-aurora-postgresql-or-amazon-rds-for-postgresql/). Your machine must be able to reach the RDS endpoint.
 
 <br/>
 
@@ -145,32 +146,32 @@ Should you want to use a tool like `pgadmin` look [here](https://aws.amazon.com/
 
 ### CONNECT TO THE MYSQL AND MARIADB DATABASES
 
-The steps and instructions are the exact same for the MYSQL and MariaDB database types.
+The connection steps are identical for MySQL and MariaDB. The `developer` and `read_only` database users are created automatically by `mysql.tf` during `terraform apply`.
 
-<br/>
+> **Note:** Use the standard `mysql` client, not the `mariadb-client` package. The MariaDB client does not support the `--enable-cleartext-plugin` flag required for IAM authentication.
 
-While still as the root user on your bastion, run the following commands:
-* `export RDSHOST="INSERT_ENDPOINT_HOST_NAME"` (An example might look like this: `iam-auth-demo-mysql.sdfv8356vhkj.us-east-1.rds.amazonaws.com`)
-* `mysql -h $RDSHOST -P 3306 -u admin -p` (You are connecting as the `admin` user here first.)
+Set your environment variables:
 
-Once connected to the database run these commands:
-* `CREATE USER dev IDENTIFIED WITH AWSAuthenticationPlugin as 'RDS';` (Creates the user `dev`)
-* From here the `dev` user is able to connect. You may want to pre-setup any databases or grants at this time.
+```bash
+export RDSHOST="$(terraform output -raw mysql_rds_endpoint)"   # or: mariadb_rds_endpoint
+export REGION="us-east-1"
+export RDSUSER="developer"   # or: read_only
+```
 
-<br/>
+Generate a 15-minute IAM auth token and connect:
 
-Quit out of the connection and setup the environment to connect as your `dev` user. There are a few different ways you can pass in AWS secret keys to your bastion to be able to connect. You can give permissions through the IAM role for the Bastion as well. For simplicity we will paste in our keys like below. Do not do this in your production environment!!
+```bash
+export TOKEN="$(aws rds generate-db-auth-token \
+  --hostname $RDSHOST --port 3306 --region $REGION --username $RDSUSER)"
 
-* `export AWS_ACCESS_KEY_ID="AWS_ACCESS_KEY_ID"` (The key for our John.Smith IAM user we created with the Terraform code)
-* `export AWS_SECRET_ACCESS_KEY="AWS_SECRET_ACCESS_KEY"`
-* `export REGION="us-east-1"` (The default_region defined in variables.tf)
-* `export RDSUSER="dev"`
-* `export TOKEN="$(aws rds generate-db-auth-token --hostname $RDSHOST --port 3306 --region us-east-1 --username $RDSUSER)"` (This is the session token. It is created based on the values above and only lasts for 15 minutes. If you connect to the the DB and 15 minutes elapse and you disconnect, you will need to regenerate this token to connect again. If you are connected and time elapses you are not kicked off the instance. See [here](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.IAMDBAuth.Connecting.html) for more information about session tokens for RDS.)
-* `echo $TOKEN` (Verify that your token was created correctly.)
-* `mysql --host=$RDSHOST --port=3306 --ssl-ca=/opt/global-bundle.pem --enable-cleartext-plugin --user=$RDSUSER --password=$TOKEN` (Command to finally connect as the `dev` user. Notice that we use SSL here. The global RDS cert is installed for you on the bastion on Terraform apply. This is required for IAM authentication. For more info on that see [here](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.SSL.html) and [here](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/PostgreSQL.Concepts.General.SSL.html).)
+mysql --host=$RDSHOST --port=3306 \
+  --ssl-ca=~/global-bundle.pem \
+  --enable-cleartext-plugin \
+  --user=$RDSUSER \
+  --password=$TOKEN
+```
 
-
-Should you want to use a tool like `SQL Workbench` look [here](https://aws.amazon.com/blogs/database/use-iam-authentication-to-connect-with-sql-workbenchj-to-amazon-aurora-mysql-or-amazon-rds-for-mysql/) for help on setting that up. Scroll all the way down to the **Connecting** section. Note that whatever machine you want to connect from, it needs to be allowed in the security group for the RDS instance.
+To use a GUI tool like SQL Workbench/J, see [this AWS guide](https://aws.amazon.com/blogs/database/use-iam-authentication-to-connect-with-sql-workbenchj-to-amazon-aurora-mysql-or-amazon-rds-for-mysql/). Your machine must be able to reach the RDS endpoint.
 
 <br/>
 
@@ -180,12 +181,13 @@ Should you want to use a tool like `SQL Workbench` look [here](https://aws.amazo
 
 ### EKS TO RDS ACCESS
 
-At work we have a somewhat unique setup for EKS clusters. Some developers need to be able to access these databases from the EKS cluster for application purposes. For deeper help you will want to look [here](https://docs.aws.amazon.com/eks/latest/userguide/service-accounts.html) in the AWS docs for EKS. Below is a sample of what we have done to make this work in our unique setup and it might help you get started as well. Be sure to look here for help with getting your pods setup to access the RDS instance as well, [here](https://docs.aws.amazon.com/eks/latest/userguide/pod-configuration.html)
+For applications running inside an EKS cluster, pods can authenticate to RDS using their Kubernetes service account identity via IRSA (IAM Roles for Service Accounts). This eliminates the need for any stored credentials in your application.
 
-```
-#Allows access from the EKS cluster to RDS instance
-# This block essentially does what is outlined here:
-# https://docs.aws.amazon.com/eks/latest/userguide/service-accounts.html
+For background, see the [EKS service accounts docs](https://docs.aws.amazon.com/eks/latest/userguide/service-accounts.html) and the [pod IAM configuration docs](https://docs.aws.amazon.com/eks/latest/userguide/pod-configuration.html).
+
+The following Terraform snippet shows how to create an IAM role that a specific Kubernetes service account can assume:
+
+```hcl
 resource "aws_iam_role" "rds_eks_access_role" {
   name               = "RDS_EKS_Access"
   assume_role_policy = data.aws_iam_policy_document.rds_eks_assume_role_policy.json
@@ -195,19 +197,120 @@ data "aws_iam_policy_document" "rds_eks_assume_role_policy" {
   statement {
     actions = ["sts:AssumeRoleWithWebIdentity"]
     effect  = "Allow"
+
     principals {
       type = "Federated"
       identifiers = [
         "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/${replace(data.aws_eks_cluster.eks.identity[0].oidc[0].issuer, "https://", "")}"
       ]
     }
+
     condition {
       test     = "StringEquals"
       variable = "${replace(data.aws_eks_cluster.eks.identity[0].oidc[0].issuer, "https://", "")}:sub"
-      values = [
-        "system:serviceaccount:${var.environment}-${var.namespace}:${var.service_name}"
-      ]
+      values   = ["system:serviceaccount:${var.environment}-${var.namespace}:${var.service_name}"]
     }
   }
 }
 ```
+
+## Requirements
+
+| Name | Version |
+|------|---------|
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | ~> 1.14.1 |
+| <a name="requirement_aws"></a> [aws](#requirement\_aws) | >= 6.0.0, < 7.0.0 |
+| <a name="requirement_mysql"></a> [mysql](#requirement\_mysql) | ~> 1.9 |
+| <a name="requirement_postgresql"></a> [postgresql](#requirement\_postgresql) | ~> 1.22 |
+| <a name="requirement_random"></a> [random](#requirement\_random) | ~> 3.5.1 |
+
+## Providers
+
+| Name | Version |
+|------|---------|
+| <a name="provider_aws"></a> [aws](#provider\_aws) | >= 6.0.0, < 7.0.0 |
+| <a name="provider_mysql"></a> [mysql](#provider\_mysql) | ~> 1.9 |
+| <a name="provider_postgresql"></a> [postgresql](#provider\_postgresql) | ~> 1.22 |
+| <a name="provider_random"></a> [random](#provider\_random) | ~> 3.5.1 |
+
+## Modules
+
+| Name | Source | Version |
+|------|--------|---------|
+| <a name="module_mariadb_rds"></a> [mariadb\_rds](#module\_mariadb\_rds) | ./modules/mariadb | n/a |
+| <a name="module_mysql_rds"></a> [mysql\_rds](#module\_mysql\_rds) | ./modules/mysql | n/a |
+| <a name="module_psql_rds"></a> [psql\_rds](#module\_psql\_rds) | ./modules/psql | n/a |
+| <a name="module_vpc"></a> [vpc](#module\_vpc) | terraform-aws-modules/vpc/aws | ~> 5.1.1 |
+
+## Resources
+
+| Name | Type |
+|------|------|
+| [aws_iam_access_key.john_smith_access_key](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_access_key) | resource |
+| [aws_iam_policy.john_smith_rds_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
+| [aws_iam_user.john_smith](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_user) | resource |
+| [aws_iam_user_policy_attachment.developer_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_user_policy_attachment) | resource |
+| [aws_secretsmanager_secret.db_admin_password](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret) | resource |
+| [aws_secretsmanager_secret_version.db_admin_password](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret_version) | resource |
+| [mysql_grant.iam_ro_user](https://registry.terraform.io/providers/terraform-providers/mysql/latest/docs/resources/grant) | resource |
+| [mysql_grant.iam_user](https://registry.terraform.io/providers/terraform-providers/mysql/latest/docs/resources/grant) | resource |
+| [mysql_user.iam_ro_user](https://registry.terraform.io/providers/terraform-providers/mysql/latest/docs/resources/user) | resource |
+| [mysql_user.iam_user](https://registry.terraform.io/providers/terraform-providers/mysql/latest/docs/resources/user) | resource |
+| [postgresql_grant.iam_dev_user_connect](https://registry.terraform.io/providers/cyrilgdn/postgresql/latest/docs/resources/grant) | resource |
+| [postgresql_grant.iam_ro_user_connect](https://registry.terraform.io/providers/cyrilgdn/postgresql/latest/docs/resources/grant) | resource |
+| [postgresql_grant_role.iam_dev_user_rds_iam](https://registry.terraform.io/providers/cyrilgdn/postgresql/latest/docs/resources/grant_role) | resource |
+| [postgresql_grant_role.iam_ro_user_rds_iam](https://registry.terraform.io/providers/cyrilgdn/postgresql/latest/docs/resources/grant_role) | resource |
+| [postgresql_role.iam_dev_user](https://registry.terraform.io/providers/cyrilgdn/postgresql/latest/docs/resources/role) | resource |
+| [postgresql_role.iam_ro_user](https://registry.terraform.io/providers/cyrilgdn/postgresql/latest/docs/resources/role) | resource |
+| [random_password.password](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/password) | resource |
+| [aws_caller_identity.current](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/caller_identity) | data source |
+
+## Inputs
+
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
+| <a name="input_Automation"></a> [Automation](#input\_Automation) | n/a | `string` | `"terraform"` | no |
+| <a name="input_Owning_Team"></a> [Owning\_Team](#input\_Owning\_Team) | n/a | `string` | `"YourTeam"` | no |
+| <a name="input_Service_Name"></a> [Service\_Name](#input\_Service\_Name) | n/a | `string` | `"rds-demo"` | no |
+| <a name="input_allocated_storage"></a> [allocated\_storage](#input\_allocated\_storage) | n/a | `number` | `20` | no |
+| <a name="input_allow_major_version_upgrade"></a> [allow\_major\_version\_upgrade](#input\_allow\_major\_version\_upgrade) | n/a | `bool` | `false` | no |
+| <a name="input_auto_minor_version_upgrade"></a> [auto\_minor\_version\_upgrade](#input\_auto\_minor\_version\_upgrade) | n/a | `bool` | `true` | no |
+| <a name="input_backup_retention_period"></a> [backup\_retention\_period](#input\_backup\_retention\_period) | Days to retain automated backups. Must be between 0 and 35. | `number` | `7` | no |
+| <a name="input_backup_window"></a> [backup\_window](#input\_backup\_window) | Daily UTC time range for automated backups. Must not overlap with maintenance\_window. | `string` | `"05:30-07:30"` | no |
+| <a name="input_db_instance_class"></a> [db\_instance\_class](#input\_db\_instance\_class) | See here for more info:  https://aws.amazon.com/rds/instance-types/ | `string` | `"db.t4g.micro"` | no |
+| <a name="input_db_instance_identifier"></a> [db\_instance\_identifier](#input\_db\_instance\_identifier) | n/a | `string` | `"iam-auth-demo"` | no |
+| <a name="input_db_secret_name"></a> [db\_secret\_name](#input\_db\_secret\_name) | AWS Secrets Manager secret name where the RDS admin password is stored. | `string` | `"rds-iam-auth/admin-password"` | no |
+| <a name="input_db_username"></a> [db\_username](#input\_db\_username) | n/a | `string` | `"admin"` | no |
+| <a name="input_default_region"></a> [default\_region](#input\_default\_region) | n/a | `string` | `"us-east-1"` | no |
+| <a name="input_deletion_protection"></a> [deletion\_protection](#input\_deletion\_protection) | Prevents accidental database deletion. Must be disabled manually before destroy. | `bool` | `true` | no |
+| <a name="input_iam_database_authentication_enabled"></a> [iam\_database\_authentication\_enabled](#input\_iam\_database\_authentication\_enabled) | n/a | `bool` | `true` | no |
+| <a name="input_maintenance_window"></a> [maintenance\_window](#input\_maintenance\_window) | Weekly UTC window for RDS maintenance. Syntax: ddd:hh24:mi-ddd:hh24:mi. | `string` | `"Sun:03:00-Sun:04:59"` | no |
+| <a name="input_multi_az"></a> [multi\_az](#input\_multi\_az) | Deploy RDS in Multi-AZ mode for automatic failover. Doubles instance cost. | `bool` | `true` | no |
+| <a name="input_rds_dev_user"></a> [rds\_dev\_user](#input\_rds\_dev\_user) | n/a | `string` | `"developer"` | no |
+| <a name="input_rds_ro_user"></a> [rds\_ro\_user](#input\_rds\_ro\_user) | n/a | `string` | `"read_only"` | no |
+| <a name="input_skip_final_snapshot"></a> [skip\_final\_snapshot](#input\_skip\_final\_snapshot) | Set to true only for dev/test environments. Always false in production. | `bool` | `false` | no |
+| <a name="input_storage_encrypted"></a> [storage\_encrypted](#input\_storage\_encrypted) | Encrypt RDS storage at rest using KMS (AWS-managed key by default). | `bool` | `true` | no |
+| <a name="input_storage_type"></a> [storage\_type](#input\_storage\_type) | n/a | `string` | `"gp3"` | no |
+| <a name="input_vpc_cidr"></a> [vpc\_cidr](#input\_vpc\_cidr) | 16 available subnets - 4094 IP addresses per subnet | `string` | `"200.100.0.0/16"` | no |
+| <a name="input_vpc_name"></a> [vpc\_name](#input\_vpc\_name) | n/a | `string` | `"demo"` | no |
+| <a name="input_vpc_subnets"></a> [vpc\_subnets](#input\_vpc\_subnets) | n/a | `map(list(string))` | <pre>{<br/>  "azs": [<br/>    "us-east-1a",<br/>    "us-east-1b",<br/>    "us-east-1c"<br/>  ],<br/>  "database_subnets": [<br/>    "200.100.96.0/20",<br/>    "200.100.112.0/20",<br/>    "200.100.128.0/20"<br/>  ],<br/>  "private_subnets": [<br/>    "200.100.0.0/20",<br/>    "200.100.16.0/20",<br/>    "200.100.32.0/20"<br/>  ],<br/>  "public_subnets": [<br/>    "200.100.48.0/20",<br/>    "200.100.64.0/20",<br/>    "200.100.80.0/20"<br/>  ]<br/>}</pre> | no |
+
+## Outputs
+
+| Name | Description |
+|------|-------------|
+| <a name="output_access_key_secret"></a> [access\_key\_secret](#output\_access\_key\_secret) | ############################################################################### USER OUTPUTS ############################################################################### |
+| <a name="output_availability_zones"></a> [availability\_zones](#output\_availability\_zones) | List of availability\_zones available for the VPC |
+| <a name="output_database_subnet_group_name"></a> [database\_subnet\_group\_name](#output\_database\_subnet\_group\_name) | Name of database subnet group |
+| <a name="output_database_subnets"></a> [database\_subnets](#output\_database\_subnets) | List of IDs of database subnets |
+| <a name="output_mariadb_rds_endpoint"></a> [mariadb\_rds\_endpoint](#output\_mariadb\_rds\_endpoint) | ############################################################################### MARIADB RDS OUTPUTS ############################################################################### |
+| <a name="output_mariadb_rds_resource_id"></a> [mariadb\_rds\_resource\_id](#output\_mariadb\_rds\_resource\_id) | n/a |
+| <a name="output_mysql_rds_endpoint"></a> [mysql\_rds\_endpoint](#output\_mysql\_rds\_endpoint) | ############################################################################### MYSQL RDS OUTPUTS ############################################################################### |
+| <a name="output_mysql_rds_resource_id"></a> [mysql\_rds\_resource\_id](#output\_mysql\_rds\_resource\_id) | n/a |
+| <a name="output_nat_public_ips"></a> [nat\_public\_ips](#output\_nat\_public\_ips) | List of public Elastic IPs created for AWS NAT Gateway |
+| <a name="output_private_subnets"></a> [private\_subnets](#output\_private\_subnets) | List of IDs of private subnets |
+| <a name="output_psql_rds_endpoint"></a> [psql\_rds\_endpoint](#output\_psql\_rds\_endpoint) | ############################################################################### PSQL RDS OUTPUTS ############################################################################### |
+| <a name="output_psql_rds_resource_id"></a> [psql\_rds\_resource\_id](#output\_psql\_rds\_resource\_id) | n/a |
+| <a name="output_public_subnets"></a> [public\_subnets](#output\_public\_subnets) | List of IDs of public subnets |
+| <a name="output_vpc_cidr_block"></a> [vpc\_cidr\_block](#output\_vpc\_cidr\_block) | The CIDR block of the VPC |
+| <a name="output_vpc_id"></a> [vpc\_id](#output\_vpc\_id) | The ID of the VPC |

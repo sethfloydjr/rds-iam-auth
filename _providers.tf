@@ -1,8 +1,9 @@
 terraform {
-  required_version = "1.7.5"
+  required_version = "~> 1.14.1"
   required_providers {
     aws = {
-      version = "> 5.0.0, <6.0.0"
+      source  = "hashicorp/aws"
+      version = ">= 6.0.0, < 7.0.0"
     }
     random = {
       source  = "hashicorp/random"
@@ -21,7 +22,7 @@ terraform {
 }
 
 provider "aws" {
-  region = "us-east-1"
+  region = var.default_region
 
   default_tags {
     tags = {
@@ -32,17 +33,18 @@ provider "aws" {
   }
 }
 
+# Note: Terraform must have network connectivity to the RDS endpoint (VPN, AWS Client VPN, etc.).
+# Use `terraform apply -target=module.mysql_rds` first if the provider reports a dependency cycle.
+# If running imports, temporarily hardcode the endpoint and credentials to break the cycle.
 provider "mysql" {
-  // when running imports of resources it helps if you temporarily define these values manually to prevent a dependency cycle
-  endpoint = module.psql_rds.psql_rds_endpoint
-  username = "admin"
+  endpoint = module.mysql_rds.mysql_rds_endpoint
+  username = var.db_username
   password = random_password.password.result
 }
 
-# PostgreSQL provider for automated PSQL user provisioning.
-# Connects using the admin password stored in SSM. Mirrors the mysql.tf approach.
-# Note: Terraform must have network connectivity to the RDS endpoint (run from within the
-# VPC or via a VPN/tunnel). Use `terraform apply -target=module.psql_rds` first if needed.
+# Connects using the admin password (same value stored in Secrets Manager). Mirrors the mysql provider above.
+# Note: Terraform must have network connectivity to the RDS endpoint (VPN, AWS Client VPN, etc.).
+# Use `terraform apply -target=module.psql_rds` first if the provider reports a dependency cycle.
 provider "postgresql" {
   host     = module.psql_rds.psql_rds_endpoint
   port     = 5432

@@ -7,14 +7,7 @@ resource "aws_security_group" "mysql_demo_rds_sg" {
     to_port     = 3306
     protocol    = "tcp"
     cidr_blocks = ["${var.vpc_cidr}"]
-    description = "mysql Access Port"
+    description = "MySQL Access Port"
   }
 
-  # outbound internet access
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
 }

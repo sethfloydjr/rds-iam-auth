@@ -133,23 +133,10 @@ variable "rds_ro_user" {
 
 ######### MISC #########
 
-variable "demo_ssm_parameter" {
+variable "db_secret_name" {
   type        = string
-  default     = "/database/demo"
-  description = "SSM Parameter Store path where the database admin password is stored (SecureString)."
-}
-
-# ssh_public_key has no default — you must supply your public key contents at plan/apply time.
-# Example: terraform apply -var='ssh_public_key=ssh-ed25519 AAAA...'
-# The key pair is retained for break-glass emergency access if SSM Session Manager is unavailable.
-variable "ssh_public_key" {
-  type        = string
-  description = "Contents of the SSH public key (.pub file) to install on the bastion for emergency access."
-  sensitive   = true
-  validation {
-    condition     = can(regex("^(ssh-rsa|ssh-ed25519|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521) ", var.ssh_public_key))
-    error_message = "ssh_public_key must be a valid SSH public key starting with a recognised key type (ssh-rsa, ssh-ed25519, ecdsa-sha2-*)."
-  }
+  default     = "rds-iam-auth/admin-password"
+  description = "AWS Secrets Manager secret name where the RDS admin password is stored."
 }
 
 

@@ -19,15 +19,19 @@ resource "postgresql_grant" "iam_dev_user_connect" {
   database    = "postgres"
   role        = postgresql_role.iam_dev_user.name
   object_type = "database"
-  privileges  = ["CONNECT", "CREATE"]
+  # CONNECT is all that is needed for IAM auth. CREATE (schema creation) is removed —
+  # the developer cannot create other users (requires CREATEROLE role attribute) or alter
+  # system settings (requires superuser). Schema/table grants should be added separately
+  # per application requirements once the target databases and schemas exist.
+  privileges = ["CONNECT"]
 
   depends_on = [postgresql_role.iam_dev_user]
 }
 
 # Grant the rds_iam role so this user can log in with an IAM auth token.
 resource "postgresql_grant_role" "iam_dev_user_rds_iam" {
-  role              = postgresql_role.iam_dev_user.name
-  grant_role        = "rds_iam"
+  role       = postgresql_role.iam_dev_user.name
+  grant_role = "rds_iam"
 
   depends_on = [postgresql_role.iam_dev_user]
 }
@@ -52,8 +56,8 @@ resource "postgresql_grant" "iam_ro_user_connect" {
 
 # Grant the rds_iam role so this user can log in with an IAM auth token.
 resource "postgresql_grant_role" "iam_ro_user_rds_iam" {
-  role              = postgresql_role.iam_ro_user.name
-  grant_role        = "rds_iam"
+  role       = postgresql_role.iam_ro_user.name
+  grant_role = "rds_iam"
 
   depends_on = [postgresql_role.iam_ro_user]
 }

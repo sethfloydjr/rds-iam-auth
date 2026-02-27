@@ -1,5 +1,8 @@
 /*
-Note that if you apply as is you will build all 3 RDS instances. Make sure you are only applying the type of RDS instance that you need.
+Applying as-is will build all 3 RDS instances. To use only one engine type:
+  1. Comment out the unneeded module blocks below.
+  2. Remove the corresponding resource ARNs from the policy in iam_access.tf.
+  3. Remove the corresponding provider from _providers.tf (mysql or postgresql).
 */
 
 module "psql_rds" {
@@ -17,7 +20,7 @@ module "psql_rds" {
   username                            = var.db_username
   password                            = random_password.password.result
   iam_database_authentication_enabled = var.iam_database_authentication_enabled
-  db_subnet_group_name                = var.vpc_name #Misleading because this value is actually looking for the name of the VPC
+  db_subnet_group_name                = module.vpc.database_subnet_group_name
   deletion_protection                 = var.deletion_protection
   skip_final_snapshot                 = var.skip_final_snapshot
   backup_retention_period             = var.backup_retention_period
@@ -48,7 +51,7 @@ module "mysql_rds" {
   username                            = var.db_username
   password                            = random_password.password.result
   iam_database_authentication_enabled = var.iam_database_authentication_enabled
-  db_subnet_group_name                = var.vpc_name #Misleading because this value is actually looking for the name of the VPC
+  db_subnet_group_name                = module.vpc.database_subnet_group_name
   deletion_protection                 = var.deletion_protection
   skip_final_snapshot                 = var.skip_final_snapshot
   backup_retention_period             = var.backup_retention_period
@@ -79,7 +82,7 @@ module "mariadb_rds" {
   username                            = var.db_username
   password                            = random_password.password.result
   iam_database_authentication_enabled = var.iam_database_authentication_enabled
-  db_subnet_group_name                = var.vpc_name #Misleading because this value is actually looking for the name of the VPC
+  db_subnet_group_name                = module.vpc.database_subnet_group_name
   deletion_protection                 = var.deletion_protection
   skip_final_snapshot                 = var.skip_final_snapshot
   backup_retention_period             = var.backup_retention_period

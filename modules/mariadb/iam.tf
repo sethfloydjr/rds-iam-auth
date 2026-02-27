@@ -16,7 +16,7 @@ resource "aws_iam_role" "developer_db_role" {
 }
 
 #Allows authorization into the demo DB through IAM for the `dev` db user
-resource "aws_iam_role_policy_attachment" "service_policy_attchment" {
+resource "aws_iam_role_policy_attachment" "service_policy_attachment" {
   role       = aws_iam_role.developer_db_role.name
   policy_arn = aws_iam_policy.rds_service_policy.arn
 }
